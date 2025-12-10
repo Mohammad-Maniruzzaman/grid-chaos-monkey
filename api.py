@@ -6,8 +6,6 @@ import chaos
 app = FastAPI(title="GridChaos Control Plane", version="1.0.0")
 
 # 2. Global State
-# We store the grid object in a global dictionary so it persists between API calls.
-# In production, this would be a Redis cache or database.
 grid_state = {
     "net": simulation.create_grid()
 }
@@ -43,12 +41,18 @@ def get_grid_status():
         health = "UNSTABLE"
     else:
         health = "HEALTHY"
-        
+    
+    # TELEMETRY CALCULATION
+    # Fix: Total Gen = Local Gen (res_gen) + External Grid Import (res_ext_grid)
+    local_gen = grid_state["net"].res_gen.p_mw.sum()
+    external_grid = grid_state["net"].res_ext_grid.p_mw.sum()
+    total_generation = local_gen + external_grid
+
     return {
         "status": health,
         "min_voltage_pu": round(min_voltage, 4),
         "total_load_mw": grid_state["net"].load.p_mw.sum(),
-        "generation_mw": grid_state["net"].res_gen.p_mw.sum()
+        "generation_mw": total_generation
     }
 
 @app.post("/inject/line_trip/{line_id}")
@@ -66,7 +70,6 @@ def trip_line(line_id: int):
 def load_spike(multiplier: float):
     """
     Simulates a Cyber Attack (Load Surge).
-    Multiplier: 1.5 = 50% increase.
     """
     try:
         chaos.cyber_attack_load_spike(grid_state["net"], multiplier)
