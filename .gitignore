@@ -1,0 +1,18 @@
+Text
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Virtual Environments
+venv/
+env/
+.venv/
+
+# Mac OS junk
+.DS_Store
+
+# Environment Variables (Secrets)
+.env
+
+# Database data (so we don't upload the actual DB)
+influxdb-data/
