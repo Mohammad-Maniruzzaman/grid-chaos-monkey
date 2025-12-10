@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  # 1. Your Python App
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    container_name: gridchaos-api
+    environment:
+      - INFLUXDB_URL=http://influxdb:8086
+      - INFLUXDB_TOKEN=my-super-secret-token
+      - INFLUXDB_ORG=gridchaos_org
+      - INFLUXDB_BUCKET=grid_telemetry
+    depends_on:
+      - influxdb
+
+  # 2. The Database (InfluxDB)
+  influxdb:
+    image: influxdb:2.7
+    container_name: gridchaos-influx
+    ports:
+      - "8086:8086"
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=password123
+      - DOCKER_INFLUXDB_INIT_ORG=gridchaos_org
+      - DOCKER_INFLUXDB_INIT_BUCKET=grid_telemetry
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=my-super-secret-token
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+
+volumes:
+  influxdb-data:
