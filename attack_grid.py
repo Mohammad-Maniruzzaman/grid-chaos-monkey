@@ -1,5 +1,5 @@
-import simulation
-import chaos
+import src.simulation as simulation
+import src.chaos as chaos
 
 # 1. Initialize
 print("--- 1. Initializing Healthy Grid ---")

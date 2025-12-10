@@ -1,0 +1,7 @@
+pandapower
+fastapi
+uvicorn
+plotly
+pandas
+influxdb-client
+streamlit

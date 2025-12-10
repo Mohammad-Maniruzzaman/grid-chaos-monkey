@@ -1,18 +1,19 @@
-# 1. Base Image: Official lightweight Python
+# 1. Base Image
 FROM python:3.10-slim
 
-# 2. Work Directory inside the container
+# 2. Work Directory
 WORKDIR /app
 
-# 3. Copy dependencies and install them
+# 3. Dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 4. Copy the rest of the app
+# 4. Copy Code
 COPY . .
 
-# 5. Open the port
+# 5. Network
 EXPOSE 8000
 
-# 6. Run the API
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
+# 6. Run (UPDATED PATH)
+# We now tell uvicorn to look inside the 'src' package for 'api'
+CMD ["uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8000"]
