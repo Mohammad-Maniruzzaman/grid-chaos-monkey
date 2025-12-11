@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # 1. Your Python App
+  # 1. The Brain (API)
   backend:
     build: .
     ports:
@@ -15,7 +15,7 @@ services:
     depends_on:
       - influxdb
 
-  # 2. The Database (InfluxDB)
+  # 2. The Memory (Database)
   influxdb:
     image: influxdb:2.7
     container_name: gridchaos-influx
@@ -31,5 +31,21 @@ services:
     volumes:
       - influxdb-data:/var/lib/influxdb2
 
+  # 3. The Face (Dashboard)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: gridchaos-grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - influxdb
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=password123
+    volumes:
+      - grafana-data:/var/lib/grafana
+
+# ONE volumes section to rule them all
 volumes:
   influxdb-data:
+  grafana-data:
