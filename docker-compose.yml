@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # 1. The Brain (API)
   backend:
@@ -45,7 +43,18 @@ services:
     volumes:
       - grafana-data:/var/lib/grafana
 
-# ONE volumes section to rule them all
+  # 4. The Operator UI (Streamlit) - THIS IS NEW
+  frontend:
+    build: .
+    container_name: gridchaos-ui
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://backend:8000
+    command: streamlit run src/ui.py
+    depends_on:
+      - backend
+
 volumes:
   influxdb-data:
   grafana-data:
