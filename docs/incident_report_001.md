@@ -39,7 +39,7 @@ Telemetry indicates the root cause was a **Cascading Failure scenario**: A cyber
 
 ## 4. Evidence
 
-_See attached screenshot: `evidence_graph.png`_
+![Grid Chaos Evidence Graph](evidence_graph.png)
 
 - **Graph A:** Shows voltage plummeting from 1.01 to 0.0.
 - **Graph B:** Shows Load vs Generation delta widening before collapse.
