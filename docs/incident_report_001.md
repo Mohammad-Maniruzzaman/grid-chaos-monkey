@@ -1,52 +1,55 @@
-# ⚡ GridChaos: Distributed Resilience Orchestrator
+# 🚨 Incident Report: GRID-2025-001
 
-> **A Microservices-based Chaos Engineering Platform for the US Power Grid.** > _Inspired by Netflix ChAP (Chaos Automation Platform)._
+| Field                     | Details                                 |
+| ------------------------- | --------------------------------------- |
+| **Incident Date**         | Dec 11, 2025                            |
+| **Severity**              | SEV-1 (Critical Availability Failure)   |
+| **Status**                | RESOLVED                                |
+| **Component**             | GridChaos Orchestrator (US-East Region) |
+| **TTD (Time to Detect)**  | < 3 seconds                             |
+| **TTR (Time to Resolve)** | 4 minutes                               |
 
-![GridChaos Dashboard](docs/evidence_graph.png)
+---
 
-## 🚀 Mission
+## 1. Executive Summary
 
-GridChaos simulates **cascading failures** in electrical power systems. It moves beyond standard load flow analysis to test the **"Blast Radius"** of component failures in real-time, using a distributed microservices architecture.
+At **14:00 UTC**, the GridChaos platform experienced a **catastrophic voltage collapse (Blackout)** across the IEEE 14-Bus System. The failure resulted in a complete loss of power flow convergence.
 
-## 🏗️ Architecture (The Stack)
+Telemetry indicates the root cause was a **Cascading Failure scenario**: A cyber-induced load spike (1.8x) saturated the reactive power reserves, followed immediately by a physical severance of Transmission Line #1 (Bus 1 -> Bus 2).
 
-- **Orchestrator:** Docker Compose (Service Mesh)
-- **Compute Engine:** Python 3.10 + Pandapower (Physics Digital Twin)
-- **Control Plane:** FastAPI (REST Interface)
-- **Telemetry Store:** InfluxDB (Time-Series Database)
-- **Observability:** Grafana (Real-time Dashboards)
-- **Mission Control:** Streamlit (Operator UI)
+## 2. Timeline
 
-## ⚡ Core Capabilities
+- **T-00:00** - Baseline Grid Operation (Voltage: 1.01 p.u., Status: HEALTHY).
+- **T+00:30** - **INJECTION:** "Botnet" Load Spike initiated via Control Plane (1.8x multiplier).
+- **T+00:35** - **ALERT:** Grafana Dashboard triggered "Low Voltage" alert (0.94 p.u.).
+- **T+01:00** - **INJECTION:** Physical sabotage of Line #1 triggered via Chaos Monkey.
+- **T+01:05** - **OUTAGE:** Physics Engine returned `None` (Divergence). API logged `status="BLACKOUT"`.
+- **T+04:00** - Operator initiated "System Reset". Grid restored to nominal state.
 
-1.  **Digital Twin Simulation:** Solves Newton-Raphson power flow equations in real-time.
-2.  **Fault Injection:**
-    - **Physical Layer:** Transmission Line severance (N-1 Contingency).
-    - **Cyber Layer:** IoT Botnet Load Spikes (DDoS Simulation).
-3.  **Observability Pipeline:** <3s Latency from Event to Dashboard.
-4.  **Hot-Reload Development:** Volume-mounted Docker containers for instant iteration.
+## 3. Root Cause Analysis (5 Whys)
 
-## 🛠️ Quick Start
+1.  **Why did the grid crash?**
+    - Demand exceeded the system's ability to transmit power (Voltage Collapse).
+2.  **Why did it exceed capacity?**
+    - A massive load spike (1.8x) occurred simultaneously with a transmission line loss.
+3.  **Why did the transmission line fail?**
+    - Intentional Fault Injection test (Chaos Engineering).
+4.  **Why was the impact so severe?**
+    - Line #1 carries the bulk of power from the Slack Generator. Losing it while under load removed the primary power corridor.
 
-### Prerequisites
+## 4. Evidence
 
-- Docker Desktop
-- Git
+_See attached screenshot: `evidence_graph.png`_
 
-### Deployment
+- **Graph A:** Shows voltage plummeting from 1.01 to 0.0.
+- **Graph B:** Shows Load vs Generation delta widening before collapse.
 
-```bash
-# 1. Clone the repo
-git clone https://github.com/Mohammad-Maniruzzaman/grid-chaos-monkey.git
+## 5. Corrective Actions
 
-# 2. Launch the Fleet
-docker compose up -d --build
+- **[Immediate]** System Reset performed.
+- **[Feature Request]** Implement automated "Load Shedding" (Circuit Breakers) in `simulation.py` to prevent blackout when Voltage < 0.85.
+- **[Process]** Update Runbook to require N-1 contingency checks before injecting load spikes > 1.5x.
 
-# 3. Access the Interfaces
-# UI: http://localhost:8501
-# API: http://localhost:8000/docs
-# Grafana: http://localhost:3000 (admin/password123)
-📉 Incident Reports
-Incident 001: Cascading Blackout Analysis
-Built by "Mohammad Maniruzzaman"
-```
+---
+
+_Report generated via GridChaos Resilience Platform_
