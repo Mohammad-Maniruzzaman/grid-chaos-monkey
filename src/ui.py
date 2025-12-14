@@ -34,7 +34,7 @@ st.markdown("""
         background-color: #1E1E1E;
         border: 1px solid #444;
         padding: 15px;
-        border-radius: 8px;
+        border-radius: 10px;
         box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
     }
     div[data-testid="stMetric"] label {
@@ -67,8 +67,8 @@ st.markdown("""
 # --- HEADER ---
 col_head1, col_head2 = st.columns([3, 1])
 with col_head1:
-    st.title("⚡ GridChaos Overwatch")
-    st.caption("RESILIENCE ORCHESTRATION PLATFORM // v2.1")
+    st.title("⚡ Grid Chaos Overwatch")
+    st.caption("RESILIENCE ORCHESTRATION PLATFORM // v2.2")
 
 st.divider()
 
@@ -146,7 +146,7 @@ def draw_chart(history):
         plot_bgcolor='rgba(0,0,0,0)',
         height=350,
         margin=dict(l=10, r=10, t=10, b=10),
-        yaxis=dict(range=[0.8, 1.1], title="Voltage (p.u.)", fixedrange=True), # Fixed range prevents jumping
+        yaxis=dict(range=[0.0, 1.1], title="Voltage (p.u.)", fixedrange=True), # Fixed range prevents jumping
         xaxis=dict(showticklabels=False, fixedrange=True)
     )
     return fig
