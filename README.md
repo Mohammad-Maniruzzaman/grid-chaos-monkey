@@ -22,7 +22,7 @@ GridChaos is a **Digital Twin** of the NY Power Grid designed to simulate system
 
 ### 1. "War Room" Scenarios (Historical Re-enactment)
 
-Simulates real-world Con Edison failure modes based on NYISO reports:
+Simulates real-world grid failure modes based on NYISO reports:
 
 - **🌊 Hurricane Ida (2021):** Flash flooding trips critical transmission corridors (Lines 0 & 1).
 - **🔥 Heatwave (2023):** External grid voltage sag + Reactive power exhaustion.
