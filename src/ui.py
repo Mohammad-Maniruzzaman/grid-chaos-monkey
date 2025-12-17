@@ -4,6 +4,7 @@ import time
 import pandas as pd
 import plotly.graph_objects as go
 import os
+import google.generativeai as genai
 
 # --- CONFIGURATION ---
 API_URL = os.getenv("API_URL", "http://localhost:8000")
@@ -15,102 +16,174 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CUSTOM CSS ---
+# --- CUSTOM CSS (FORCE VISIBILITY) ---
 st.markdown("""
 <style>
-    .stApp { background-color: #0e1117; color: #FFFFFF !important; }
-    p, div, h1, h2, h3, h4, span, label { color: #E0E0E0 !important; }
+    /* 1. Force Global Dark Background */
+    .stApp {
+        background-color: #0e1117;
+        color: #FFFFFF;
+    }
+    
+    /* 2. SIDEBAR VISIBILITY */
+    /* Force sidebar background */
+    section[data-testid="stSidebar"] {
+        background-color: #161616;
+    }
+    /* Force all text in sidebar to be White */
+    section[data-testid="stSidebar"] h1, 
+    section[data-testid="stSidebar"] h2, 
+    section[data-testid="stSidebar"] h3, 
+    section[data-testid="stSidebar"] span, 
+    section[data-testid="stSidebar"] div,
+    section[data-testid="stSidebar"] label,
+    section[data-testid="stSidebar"] p {
+        color: #FFFFFF !important;
+    }
+
+    /* 3. INPUT LABELS (Dropdowns & Sliders) */
+    /* This targets the text ABOVE the box */
+    .stSelectbox label, .stSlider label, .stNumberInput label {
+        color: #FFFFFF !important;
+        font-size: 16px !important;
+        font-weight: bold !important;
+    }
+    
+    /* 4. METRIC CARDS (Voltage, Load, Gen) */
     div[data-testid="stMetric"] {
-        background-color: #1E1E1E; border: 1px solid #444;
-        padding: 15px; border-radius: 8px;
-        box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
+        background-color: #1E1E1E;
+        border: 1px solid #555;
+        padding: 15px;
+        border-radius: 8px;
     }
-    div[data-testid="stMetric"] label { color: #AAAAAA !important; }
-    div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #FFFFFF !important; }
-    section[data-testid="stSidebar"] { background-color: #161616; }
+    /* The Label (e.g. "Min Voltage") */
+    div[data-testid="stMetricLabel"] label, 
+    div[data-testid="stMetricLabel"] div,
+    div[data-testid="stMetricLabel"] p {
+        color: #CCCCCC !important; /* Light Grey */
+        font-size: 16px !important;
+    }
+    /* The Value (e.g. "1.000 p.u.") */
+    div[data-testid="stMetricValue"] div {
+        color: #FFFFFF !important; /* Bright White */
+        font-size: 24px !important;
+    }
+
+    /* 5. BUTTONS */
     .stButton>button {
-        background-color: #D32F2F; color: white !important;
-        border: none; height: 3em; width: 100%; font-weight: bold;
+        background-color: #D32F2F;
+        color: white !important;
+        border: 1px solid #FF5252;
+        border-radius: 5px;
+        height: 3em;
+        width: 100%;
+        font-weight: bold;
     }
-    .stButton>button:hover { background-color: #FF5252; }
+    .stButton>button:hover {
+        background-color: #FF5252;
+        border-color: white;
+    }
+    
+    /* 6. Headers (War Room, etc) */
+    h1, h2, h3 {
+        color: #FFFFFF !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # --- HEADER ---
-col_head1, col_head2 = st.columns([3, 1])
-with col_head1:
-    st.title("⚡ GridChaos Overwatch")
-    st.caption("RESILIENCE ORCHESTRATION PLATFORM // v2.7 COMPLETE")
-
+st.title("⚡ GridChaos Overwatch")
+st.caption("RESILIENCE ORCHESTRATION PLATFORM // v4.3 HIGH-VISIBILITY")
 st.divider()
 
 # --- HELPER: AI ANALYSIS ---
 def get_ai_analysis(volts, load, gen, status):
-    with st.spinner('🤖 AI Agent is analyzing system telemetry...'):
-        time.sleep(1.5)
-        if status == "HEALTHY":
-            return "✅ **AI Assessment:** Nominal Operation. Voltage Profile: Stable (1.0 p.u)."
-        if volts == 0.0 or status == "BLACKOUT":
-            return "💀 **CRITICAL INCIDENT:** Voltage Collapse. Root Cause: N-1 line loss + Load saturation."
-        if volts < 0.96 or status == "UNSTABLE":
-            return "⚠️ **RISK HIGH:** Severe Undervoltage. Recommendation: Shed 15% Load."
-    return "Analyzing..."
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key: return "⚠️ **AI Offline:** Key not found."
 
-# --- SIDEBAR: MISSION CONTROL ---
+    try:
+        genai.configure(api_key=api_key)
+        # Dynamic Model Discovery
+        valid_models = []
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                valid_models.append(m.name)
+        
+        if not valid_models:
+            return "❌ **AI Error:** No compatible models found."
+
+        selected_model = next((m for m in valid_models if 'flash' in m), valid_models[0])
+        model = genai.GenerativeModel(selected_model)
+        
+        prompt = f"""
+        Act as a Senior SRE. Analyze Grid Telemetry:
+        - Status: {status}
+        - Voltage: {volts:.3f} p.u. (Target: 1.0)
+        - Load: {load:.1f} MW
+        Provide Root Cause Analysis and 3 Remediation Steps. Concise.
+        """
+        
+        with st.spinner(f'⚡ Analyzing via {selected_model}...'):
+            response = model.generate_content(prompt)
+            return response.text
+
+    except Exception as e:
+        return f"❌ **AI Failed:** {str(e)}"
+
+# --- SIDEBAR: CONTROL PLANE ---
 with st.sidebar:
     st.header("📜 WAR ROOM SCENARIOS")
     
-    # 1. Hurricane Ida
     with st.expander("🌊 Hurricane Ida (2021)", expanded=False):
-        st.write("**Context:** Flash floods caused multi-feeder protection trips.")
-        if st.button("TRIGGER IDA SIMULATION"):
+        st.write("**Context:** Flood protection trips lines.")
+        if st.button("TRIGGER IDA"):
             requests.post(f"{API_URL}/inject/scenario/hurricane_ida")
-            st.toast("Substation Flooding Simulated", icon="🌊")
+            st.toast("Simulated: Hurricane Ida", icon="🌊")
 
-    # 2. Heatwave 2023
     with st.expander("🔥 Heatwave (2023)", expanded=False):
-        st.write("**Context:** Sustained temps >95°F. Reactive reserves depleted.")
+        st.write("**Context:** Temps >95°F. Grid Sag.")
         if st.button("TRIGGER HEATWAVE"):
             requests.post(f"{API_URL}/inject/scenario/heatwave_2023")
-            st.toast("Voltage Collapse Sequence Started", icon="🔥")
+            st.toast("Simulated: Heatwave", icon="🔥")
 
-    # 3. EV Fleet Spike
     with st.expander("⚡ EV Fleet Spike (2024)", expanded=False):
-        st.write("**Context:** 50+ Buses sync-charging. 40MW step-change.")
+        st.write("**Context:** 50+ Buses sync-charging.")
         if st.button("TRIGGER EV SPIKE"):
             requests.post(f"{API_URL}/inject/scenario/ev_fleet_spike")
-            st.toast("Bus 14 Overload Initiated", icon="⚡")
+            st.toast("Simulated: EV Load Spike", icon="⚡")
             
-    # 4. Superstorm Sandy
     with st.expander("🌪️ Superstorm Sandy (2012)", expanded=False):
-        st.write("**Context:** Relay mis-operation tripped Generators.")
+        st.write("**Context:** Generator Protection Trip.")
         if st.button("TRIGGER SANDY"):
             requests.post(f"{API_URL}/inject/scenario/sandy_2012")
-            st.toast("Generator Protection Trip", icon="🌪️")
+            st.toast("Simulated: Generator Trip", icon="🌪️")
 
-    # 5. Blackout 2003
     with st.expander("🌲 Northeast Blackout (2003)", expanded=False):
-        st.write("**Context:** Vegetation contact + High Load = Cascade.")
+        st.write("**Context:** Tree Contact Cascade.")
         if st.button("TRIGGER 2003 CASCADE"):
             requests.post(f"{API_URL}/inject/scenario/blackout_2003")
-            st.toast("Cascade Sequence Started", icon="🌲")
+            st.toast("Simulated: Cascade Failure", icon="🌲")
 
     st.markdown("---")
     
-    # --- MANUAL CONTROL (RESTORED) ---
-    st.header("🎮 MANUAL CONTROL")
-    with st.expander("Manual Fault Injection", expanded=False):
-        line_id = st.selectbox("Select Line", options=[0, 1, 2, 3, 4], index=0)
-        if st.button("✂️ CUT LINE"):
-            requests.post(f"{API_URL}/inject/line_trip/{line_id}")
-            st.toast(f"Line {line_id} Cut", icon="✂️")
+    st.header("🎮 MANUAL FAULT INJECTION")
+    with st.expander("Manual Overrides", expanded=True):
         
-        multiplier = st.slider("Load Spike", 1.0, 5.0, 1.5)
-        if st.button("👾 INJECT SPIKE"):
+        st.markdown("**1. Physical Layer**")
+        line_id = st.selectbox("Select Transmission Line ID", options=[0, 1, 2, 3, 4], index=0)
+        if st.button("✂️ TRIP LINE"):
+            requests.post(f"{API_URL}/inject/line_trip/{line_id}")
+            st.toast(f"Manual Trip: Line {line_id}", icon="✂️")
+        
+        st.markdown("---")
+        
+        st.markdown("**2. Cyber Layer**")
+        multiplier = st.slider("Load Spike Multiplier (x)", 1.0, 5.0, 1.5)
+        if st.button("👾 INJECT LOAD SPIKE"):
             requests.post(f"{API_URL}/inject/load_spike/{multiplier}")
+            st.toast(f"Manual Load Spike: {multiplier}x", icon="👾")
 
     st.markdown("---")
-    
     if st.button("🔄 SYSTEM RESET", type="primary"):
         requests.post(f"{API_URL}/reset")
         st.toast("System Normalized", icon="✅")
@@ -158,37 +231,28 @@ if st.toggle("🔴 LIVE DATA FEED", value=True):
             volts = data['min_voltage_pu']
             status = data['status']
             
-            # 1. Update Standard Metrics
+            # Metrics
             metric_volts.metric("Min Voltage", f"{volts:.3f} p.u.", delta=f"{(volts-1.0):.3f}", delta_color="inverse" if volts < 0.95 else "off")
             metric_load.metric("Grid Load", f"{data['total_load_mw']:.1f} MW")
             metric_gen.metric("Generation", f"{data['generation_mw']:.1f} MW")
             
-            # 2. CUSTOM STATUS BADGE
+            # Status Badge (FIXED: White Text on Amber for UNSTABLE)
             status_color = "#00C851" # Green
             text_color = "white"
             
             if status == "UNSTABLE":
-                status_color = "#ea9c00ff" # Yellow
-                text_color = "black"
+                status_color = "#FF8800" # Darker Amber/Orange (Better contrast for white text)
+                text_color = "white"     # FORCE WHITE TEXT
             elif status == "CRITICAL" or status == "BLACKOUT":
                 status_color = "#ff4444" # Red
                 text_color = "white"
                 
-            metric_status.markdown(
-                f"""
-                <div style="background-color: {status_color}; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #444;">
-                    <h4 style="color: {text_color}; margin:0; padding:0; font-weight:bold;">SYSTEM: {status}</h4>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+            metric_status.markdown(f"""<div style="background-color: {status_color}; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #444;"><h4 style="color: {text_color}; margin:0; padding:0; font-weight:bold;">SYSTEM: {status}</h4></div>""", unsafe_allow_html=True)
 
-            # 3. Chart
             st.session_state.history.append({"time": pd.Timestamp.now(), "voltage": volts})
             if len(st.session_state.history) > 60: st.session_state.history.pop(0)
             chart_placeholder.plotly_chart(draw_chart(st.session_state.history), use_container_width=True)
             
         except Exception:
             metric_status.error("Connecting...")
-        
         time.sleep(3)

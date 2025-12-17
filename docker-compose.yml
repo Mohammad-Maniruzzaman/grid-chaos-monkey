@@ -7,7 +7,7 @@ services:
     ports:
       - "8000:8000"
     container_name: gridchaos-api
-    # Hot Reload: Sync files live
+    # Hot Reload
     volumes:
       - ./:/app
     environment:
@@ -15,7 +15,7 @@ services:
       - INFLUXDB_TOKEN=my-super-secret-token
       - INFLUXDB_ORG=gridchaos_org
       - INFLUXDB_BUCKET=grid_telemetry
-      - PYTHONDONTWRITEBYTECODE=1 # Prevents Mac/Linux file conflicts
+      - PYTHONDONTWRITEBYTECODE=1
     depends_on:
       - influxdb
 
@@ -55,16 +55,19 @@ services:
     container_name: gridchaos-ui
     ports:
       - "8501:8501"
-    # Hot Reload: Sync files live
+    # Hot Reload
     volumes:
       - ./:/app
+    # --- MERGED ENVIRONMENT BLOCK ---
     environment:
       - API_URL=http://backend:8000
-      - PYTHONDONTWRITEBYTECODE=1 # Prevents Mac/Linux file conflicts
-    # Use 'poll' watcher for better Mac performance
+      - PYTHONDONTWRITEBYTECODE=1
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY} 
+    # --------------------------------
     command: streamlit run src/ui.py --server.address=0.0.0.0 --server.fileWatcherType=poll
     depends_on:
       - backend
+
 volumes:
   influxdb-data:
   grafana-data:
