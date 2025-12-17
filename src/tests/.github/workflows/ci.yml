@@ -1,0 +1,28 @@
+name: GridChaos CI
+
+# Trigger this workflow every time you push code
+on: [push]
+
+jobs:
+  test-suite:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Download your code onto the GitHub server
+      - uses: actions/checkout@v3
+
+      # 2. Install Python 3.10
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      # 3. Install your project dependencies
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pandapower fastapi uvicorn plotly pandas influxdb-client streamlit requests
+
+      # 4. Run the test file we just created
+      - name: Run Physics Tests
+        run: pytest tests/

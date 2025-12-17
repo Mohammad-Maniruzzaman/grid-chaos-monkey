@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   # 1. The Brain (API)
   backend:
@@ -5,11 +7,15 @@ services:
     ports:
       - "8000:8000"
     container_name: gridchaos-api
+    # Hot Reload: Sync files live
+    volumes:
+      - ./:/app
     environment:
       - INFLUXDB_URL=http://influxdb:8086
       - INFLUXDB_TOKEN=my-super-secret-token
       - INFLUXDB_ORG=gridchaos_org
       - INFLUXDB_BUCKET=grid_telemetry
+      - PYTHONDONTWRITEBYTECODE=1 # Prevents Mac/Linux file conflicts
     depends_on:
       - influxdb
 
@@ -43,18 +49,22 @@ services:
     volumes:
       - grafana-data:/var/lib/grafana
 
-  # 4. The Operator UI (Streamlit) - THIS IS NEW
+  # 4. The Operator UI (Streamlit)
   frontend:
     build: .
     container_name: gridchaos-ui
     ports:
       - "8501:8501"
+    # Hot Reload: Sync files live
+    volumes:
+      - ./:/app
     environment:
       - API_URL=http://backend:8000
-    command: streamlit run src/ui.py
+      - PYTHONDONTWRITEBYTECODE=1 # Prevents Mac/Linux file conflicts
+    # Use 'poll' watcher for better Mac performance
+    command: streamlit run src/ui.py --server.address=0.0.0.0 --server.fileWatcherType=poll
     depends_on:
       - backend
-
 volumes:
   influxdb-data:
   grafana-data:
