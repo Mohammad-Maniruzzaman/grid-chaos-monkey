@@ -1,52 +1,64 @@
+import time
 import pandapower as pp
 import pandapower.networks as pn
-import pandas as pd
+
 
 def create_grid():
     """
-    Loads the IEEE 14-Bus Standard System.
-    This represents a realistic chunk of the US power grid (Midwest).
+    Loads the IEEE 14-bus test system.
     """
-    # Load the standard network model
-    net = pn.case14()
-    return net
+    return pn.case14()
+
 
 def run_simulation(net):
     """
-    Runs a Power Flow (Newton-Raphson method) to calculate
-    voltages and line flows based on current physics.
+    Runs a power-flow simulation and returns a stable snapshot dict.
+
+    Returns None if the solver fails or results are unavailable.
     """
+    start = time.time()
+
     try:
-        # Run the power flow solver
         pp.runpp(net)
-        print("✅ Power Flow Converged!")
-    except Exception as e:
-        print(f"❌ Simulation Failed: {e}")
+    except Exception:
         return None
 
-    # extract key metrics
-    # res_bus contains voltage levels (vm_pu = Voltage Magnitude Per Unit)
-    # 1.0 pu = ideal. < 0.90 = Brownout. < 0.80 = Blackout.
-    results = net.res_bus[['vm_pu', 'p_mw', 'q_mvar']]
-    
-    return results
+    solve_time_ms = round((time.time() - start) * 1000, 2)
 
-if __name__ == "__main__":
-    print("--- Initializing GridChaos Engine ---")
-    grid = create_grid()
-    
-    print("--- Running Baseline Simulation ---")
-    metrics = run_simulation(grid)
-    
-    if metrics is not None:
-        print("\n--- Grid State (First 5 Buses) ---")
-        print(metrics.head())
-        
-        # Simple Logic: Check if grid is healthy
-        min_voltage = metrics['vm_pu'].min()
-        print(f"\nMinimum Voltage: {min_voltage:.4f} p.u.")
-        
-        if min_voltage < 0.90:
-            print("⚠️ ALERT: Grid Instability Detected!")
-        else:
-            print("✅ Grid is Stable.")
+    # Defensive checks — CI-safe
+    if not hasattr(net, "res_bus"):
+        return None
+    if net.res_bus is None or net.res_bus.empty:
+        return None
+    if "vm_pu" not in net.res_bus.columns:
+        return None
+
+    min_voltage_pu = float(net.res_bus["vm_pu"].min())
+
+    # Load
+    total_load_mw = 0.0
+    if hasattr(net, "load") and not net.load.empty and "p_mw" in net.load.columns:
+        total_load_mw = float(net.load["p_mw"].sum())
+
+    # Generation
+    local_gen_mw = 0.0
+    if hasattr(net, "res_gen") and not net.res_gen.empty and "p_mw" in net.res_gen.columns:
+        local_gen_mw = float(net.res_gen["p_mw"].sum())
+
+    ext_grid_mw = 0.0
+    if (
+        hasattr(net, "res_ext_grid")
+        and not net.res_ext_grid.empty
+        and "p_mw" in net.res_ext_grid.columns
+    ):
+        ext_grid_mw = float(net.res_ext_grid["p_mw"].sum())
+
+    total_generation_mw = local_gen_mw + ext_grid_mw
+
+    return {
+        "converged": True,
+        "solve_time_ms": solve_time_ms,
+        "min_voltage_pu": min_voltage_pu,
+        "total_load_mw": total_load_mw,
+        "generation_mw": total_generation_mw,
+    }

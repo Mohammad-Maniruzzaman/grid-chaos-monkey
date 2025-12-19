@@ -6,4 +6,4 @@ pandas
 influxdb-client
 streamlit
 requests
-google-generativeai>=0.7.2  <-- FORCE NEW VERSION
+google-generativeai>=0.7.2

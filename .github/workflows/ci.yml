@@ -1,28 +1,47 @@
 name: GridChaos CI
 
-# Trigger this workflow every time you push code
-on: [push]
+on:
+  push:
+  pull_request:
 
 jobs:
   test-suite:
     runs-on: ubuntu-latest
 
-    steps:
-      # 1. Download your code onto the GitHub server
-      - uses: actions/checkout@v3
+    env:
+      # Ensure imports work consistently
+      PYTHONPATH: .
+      # Make UI safe in CI (no secrets expected)
+      GOOGLE_API_KEY: ""
+      # Avoid accidental real connections (your code should handle missing services)
+      INFLUXDB_URL: "http://localhost:8086"
+      INFLUXDB_TOKEN: "dummy"
+      INFLUXDB_ORG: "gridchaos_org"
+      INFLUXDB_BUCKET: "grid_telemetry"
 
-      # 2. Install Python 3.10
-      - name: Set up Python
-        uses: actions/setup-python@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
         with:
           python-version: "3.10"
+          cache: "pip"
 
-      # 3. Install your project dependencies
-      - name: Install Dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest pandapower fastapi uvicorn plotly pandas influxdb-client streamlit requests
+          python -m pip install -r requirements.txt
+          python -m pip install pytest
 
-      # 4. Run the test file we just created
-      - name: Run Physics Tests
-        run: pytest tests/
+      - name: Quick import smoke checks
+        run: |
+          python -c "import src.simulation"
+          python -c "import src.chaos"
+          python -c "import src.telemetry"
+          python -c "import src.ui"
+
+      - name: Run tests
+        run: |
+          pytest -q
