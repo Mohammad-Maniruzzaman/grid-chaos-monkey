@@ -18,6 +18,16 @@ class Experiment:
     status: str = "ACTIVE"   # ACTIVE | ENDED
     notes: str = ""
 
+    # NEW: Netflix-aligned execution mode
+    execution_mode: str = "sandbox"  # "sandbox" | "guardrailed"
+
+    # NEW: guardrail config
+    max_load_loss_pct: float = 0.20
+
+    # NEW: guardrail state
+    blast_radius_triggered: bool = False
+    blast_radius_reason: Optional[str] = None
+
 
 class GridController:
     """
@@ -42,7 +52,7 @@ class GridController:
             self.active_experiment = None
             self.last_mutation_source = "reset"
 
-    def begin_experiment(self, scenario: str, notes: str = "") -> Experiment:
+    def begin_experiment(self, scenario: str, notes: str = "", execution_mode: str = "sandbox", max_load_loss_pct: float = 0.20) -> Experiment:
         with self._lock:
             if self.active_experiment and self.active_experiment.status == "ACTIVE":
                 raise RuntimeError("An experiment is already active. End it before starting a new one.")
@@ -53,6 +63,8 @@ class GridController:
                 phase="baseline",
                 started_at_ns=time.time_ns(),
                 notes=notes,
+                execution_mode=execution_mode,
+    max_load_loss_pct=max_load_loss_pct,
             )
             self.active_experiment = exp
             self.last_mutation_source = "scenario"
@@ -78,6 +90,74 @@ class GridController:
     def read(self):
         with self._lock:
             return self.net
+    def snapshot(self) -> Dict[str, Any]:
+    """
+    Runs simulation snapshot and applies blast radius guardrail if in guardrailed mode.
+    """
+    with self._lock:
+        exp = self.active_experiment
+
+        # Build context without calling experiment_context() (avoids lock re-entry)
+        if not exp:
+            ctx = {
+                "experiment_id": "none",
+                "scenario": "none",
+                "phase": "baseline",
+                "simulation_id": self.simulation_id,
+                "mutation_source": self.last_mutation_source,
+            }
+            execution_mode = "sandbox"
+            max_loss = 0.20
+        else:
+            ctx = {
+                "experiment_id": exp.experiment_id,
+                "scenario": exp.scenario,
+                "phase": exp.phase,
+                "simulation_id": self.simulation_id,
+                "mutation_source": self.last_mutation_source,
+            }
+            execution_mode = getattr(exp, "execution_mode", "sandbox")
+            max_loss = float(getattr(exp, "max_load_loss_pct", 0.20))
+
+        snap = simulation.run_simulation(self.net)
+        if snap is None:
+            return {
+                "converged": False,
+                "error": "Powerflow failed",
+                "context": ctx,
+                "execution_mode": execution_mode,
+            }
+
+        # Attach context
+        snap["context"] = ctx
+        snap["execution_mode"] = execution_mode
+
+        # Apply guardrails only for guardrailed mode
+        if exp and exp.status == "ACTIVE" and execution_mode == "guardrailed":
+            total_load = float(snap.get("total_load_mw", 0.0))
+            gen = float(snap.get("generation_mw", 0.0))
+
+            if total_load > 0:
+                est_loss_pct = max(0.0, (total_load - gen) / total_load)
+            else:
+                est_loss_pct = 0.0
+
+            snap["estimated_load_loss_pct"] = round(est_loss_pct, 4)
+
+            if est_loss_pct >= max_loss:
+                exp.blast_radius_triggered = True
+                exp.blast_radius_reason = (
+                    f"Blast radius exceeded: estimated {est_loss_pct:.1%} load lost "
+                    f"(limit {max_loss:.0%})"
+                )
+
+        # Always include guardrail state if experiment exists
+        if exp:
+            snap["blast_radius_triggered"] = getattr(exp, "blast_radius_triggered", False)
+            snap["blast_radius_reason"] = getattr(exp, "blast_radius_reason", None)
+
+        return snap
+
 
     def experiment_context(self) -> Dict[str, str]:
         with self._lock:
