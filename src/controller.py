@@ -64,7 +64,7 @@ class GridController:
                 started_at_ns=time.time_ns(),
                 notes=notes,
                 execution_mode=execution_mode,
-    max_load_loss_pct=max_load_loss_pct,
+                max_load_loss_pct=max_load_loss_pct,
             )
             self.active_experiment = exp
             self.last_mutation_source = "scenario"
@@ -91,30 +91,29 @@ class GridController:
         with self._lock:
             return self.net
     def snapshot(self) -> Dict[str, Any]:
-    """
-    Runs simulation snapshot and applies blast radius guardrail if in guardrailed mode.
-    """
-    with self._lock:
-        exp = self.active_experiment
+ 
+    #Runs simulation snapshot and applies blast radius guardrail if in guardrailed mode.
+        with self._lock:
+            exp = self.active_experiment
 
         # Build context without calling experiment_context() (avoids lock re-entry)
-        if not exp:
-            ctx = {
-                "experiment_id": "none",
-                "scenario": "none",
-                "phase": "baseline",
-                "simulation_id": self.simulation_id,
-                "mutation_source": self.last_mutation_source,
-            }
-            execution_mode = "sandbox"
-            max_loss = 0.20
-        else:
-            ctx = {
-                "experiment_id": exp.experiment_id,
-                "scenario": exp.scenario,
-                "phase": exp.phase,
-                "simulation_id": self.simulation_id,
-                "mutation_source": self.last_mutation_source,
+            if not exp:
+                ctx = {
+                    "experiment_id": "none",
+                    "scenario": "none",
+                    "phase": "baseline",
+                    "simulation_id": self.simulation_id,
+                    "mutation_source": self.last_mutation_source,
+                }
+                execution_mode = "sandbox"
+                max_loss = 0.20
+            else:
+                ctx = {
+                    "experiment_id": exp.experiment_id,
+                    "scenario": exp.scenario,
+                    "phase": exp.phase,
+                    "simulation_id": self.simulation_id,
+                    "mutation_source": self.last_mutation_source,
             }
             execution_mode = getattr(exp, "execution_mode", "sandbox")
             max_loss = float(getattr(exp, "max_load_loss_pct", 0.20))
@@ -157,7 +156,6 @@ class GridController:
             snap["blast_radius_reason"] = getattr(exp, "blast_radius_reason", None)
 
         return snap
-
 
     def experiment_context(self) -> Dict[str, str]:
         with self._lock:
