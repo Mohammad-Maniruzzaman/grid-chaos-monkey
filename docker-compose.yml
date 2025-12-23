@@ -4,20 +4,38 @@ services:
   # 1. The Brain (API)
   backend:
     build: .
+    container_name: gridchaos-api
     ports:
       - "8000:8000"
-    container_name: gridchaos-api
-    # Hot Reload
     volumes:
       - ./:/app
+    working_dir: /app
+    command: uvicorn src.api:app --host 0.0.0.0 --port 8000 --reload
     environment:
+      # Influx (support both naming conventions to match your code)
       - INFLUXDB_URL=http://influxdb:8086
       - INFLUXDB_TOKEN=my-super-secret-token
       - INFLUXDB_ORG=gridchaos_org
       - INFLUXDB_BUCKET=grid_telemetry
+      - INFLUX_URL=http://influxdb:8086
+      - INFLUX_TOKEN=my-super-secret-token
+      - INFLUX_ORG=gridchaos_org
+      - INFLUX_BUCKET=grid_telemetry
+
+      # Runtime
       - PYTHONDONTWRITEBYTECODE=1
+
+      # Optional thresholds
+      - V_CRITICAL=0.90
+      - V_UNSTABLE=0.95
+
     depends_on:
       - influxdb
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
 
   # 2. The Memory (Database)
   influxdb:
@@ -55,18 +73,19 @@ services:
     container_name: gridchaos-ui
     ports:
       - "8501:8501"
-    # Hot Reload
     volumes:
       - ./:/app
-    # --- MERGED ENVIRONMENT BLOCK ---
+    working_dir: /app
     environment:
+      # Support both env var names to match whichever UI code you have
       - API_URL=http://backend:8000
+      - GRIDCHAOS_API=http://backend:8000
       - PYTHONDONTWRITEBYTECODE=1
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY} 
-    # --------------------------------
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
     command: streamlit run src/ui.py --server.address=0.0.0.0 --server.fileWatcherType=poll
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   influxdb-data:

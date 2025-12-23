@@ -1,10 +1,10 @@
 import os
+from typing import Optional
 from fastapi import FastAPI, HTTPException
-
-from .import simulation
-from .import chaos
-from .telemetry import db
+from pydantic import BaseModel
+from . import chaos
 from .controller import GridController
+from .telemetry import db
 
 """
 GridChaos Control Plane Design Notes
@@ -18,13 +18,15 @@ GridChaos Control Plane Design Notes
 READ_ONLY_MODE = os.getenv("READ_ONLY_MODE", "false").lower() == "true"
 
 app = FastAPI(title="GridChaos Control Plane", version="2.0.0")
-
 controller = GridController()
 
 
 def _require_writable():
     if READ_ONLY_MODE:
-        raise HTTPException(status_code=403, detail="READ_ONLY_MODE is enabled. Mutations are disabled.")
+        raise HTTPException(
+            status_code=403,
+            detail="READ_ONLY_MODE is enabled. Mutations are disabled.",
+        )
 
 
 def _health_from_voltage(min_voltage: float) -> str:
@@ -37,6 +39,15 @@ def _health_from_voltage(min_voltage: float) -> str:
     if min_voltage < v_unstable:
         return "UNSTABLE"
     return "HEALTHY"
+
+
+class StartExperimentRequest(BaseModel):
+    # Netflix-aligned modes:
+    # - "sandbox"     = uncontained chaos (blackout allowed)
+    # - "guardrailed" = safe chaos (blast radius containment + later auto-recovery)
+    execution_mode: str = "sandbox"  # "sandbox" | "guardrailed"
+    max_load_loss_pct: float = 0.20
+    notes: str = ""
 
 
 @app.get("/")
@@ -67,23 +78,30 @@ def list_scenarios():
 
 
 @app.post("/experiments/start/{scenario_key}")
-def start_experiment(scenario_key: str):
+def start_experiment(scenario_key: str, req: StartExperimentRequest):
     """
     Starts an experiment lifecycle and sets phase=baseline.
-    This does NOT apply chaos yet. (Operator can trigger chaos next.)
+    This does NOT apply chaos yet. (Operator triggers chaos next.)
     """
     _require_writable()
     if scenario_key not in chaos.SCENARIOS:
         raise HTTPException(status_code=404, detail="Scenario not found")
 
     try:
-        exp = controller.begin_experiment(scenario_key)
+        exp = controller.begin_experiment(
+            scenario=scenario_key,
+            notes=req.notes,
+            execution_mode=req.execution_mode,
+            max_load_loss_pct=req.max_load_loss_pct,
+        )
         controller.set_phase("baseline")
         return {
             "message": "Experiment started",
             "experiment_id": exp.experiment_id,
             "scenario": exp.scenario,
             "phase": exp.phase,
+            "execution_mode": getattr(exp, "execution_mode", "sandbox"),
+            "max_load_loss_pct": getattr(exp, "max_load_loss_pct", 0.20),
         }
     except Exception as e:
         raise HTTPException(status_code=409, detail=str(e))
@@ -102,55 +120,46 @@ def end_experiment():
 @app.get("/status")
 def get_grid_status():
     """
-    Runs a Power Flow simulation, returns health, AND logs to InfluxDB.
+    Runs a Power Flow snapshot via the controller (lock-safe), returns health,
+    AND logs to InfluxDB correlated to experiment context.
     """
-    snap = simulation.run_simulation(grid_state["net"])
+    snap = controller.snapshot()
+    ctx = snap.get("context", {})
 
     # Handle Blackouts (Physics Failed)
-    if snap is None:
-        db.log_grid_state(voltage_pu=0.0, total_load=0, total_gen=0, status="BLACKOUT")
+    if not snap.get("converged", False):
+        db.log_grid_state(
+            ctx=ctx,
+            voltage_pu=0.0,
+            total_load=0.0,
+            total_gen=0.0,
+            status="BLACKOUT",
+            converged=False,
+            solve_time_ms=0.0,
+        )
         return {
             "status": "BLACKOUT",
             "min_voltage_pu": 0.0,
             "total_load_mw": 0.0,
             "generation_mw": 0.0,
-            "message": "Power flow diverged or results unavailable. Grid has collapsed.",
+            "message": snap.get(
+                "error",
+                "Power flow diverged or results unavailable. Grid has collapsed.",
+            ),
+            "context": ctx,
+            "execution_mode": snap.get("execution_mode", "sandbox"),
+            "estimated_load_loss_pct": snap.get("estimated_load_loss_pct"),
+            "blast_radius_triggered": snap.get("blast_radius_triggered", False),
+            "blast_radius_reason": snap.get("blast_radius_reason"),
+            "containment_action": snap.get("containment_action"),
         }
 
-    # Pull metrics from the snapshot dict (Option A contract)
+    # Pull metrics from snapshot dict
     min_voltage = float(snap["min_voltage_pu"])
     total_load = float(snap.get("total_load_mw", 0.0))
     total_generation = float(snap.get("generation_mw", 0.0))
 
-    # Determine Health Status
-    if min_voltage < 0.90:
-        health = "CRITICAL"
-    elif min_voltage < 0.95:
-        health = "UNSTABLE"
-    else:
-        health = "HEALTHY"
-
-    # Log to Database
-    db.log_grid_state(min_voltage, total_load, total_generation, health)
-
-    return {
-        "status": health,
-        "min_voltage_pu": round(min_voltage, 4),
-        "total_load_mw": round(total_load, 3),
-        "generation_mw": round(total_generation, 3),
-        # Optional: expose solver timing if you want (nice for SRE signal)
-        "solve_time_ms": snap.get("solve_time_ms"),
-    }
-
-    res_bus = sim["res_bus"]
-    min_voltage = float(res_bus["vm_pu"].min())
-
-    # generation and load are pulled from the current net state (pandapower)
-    local_gen = float(net.res_gen.p_mw.sum()) if hasattr(net, "res_gen") else 0.0
-    external_grid = float(net.res_ext_grid.p_mw.sum()) if hasattr(net, "res_ext_grid") else 0.0
-    total_generation = local_gen + external_grid
-    total_load = float(net.load.p_mw.sum()) if hasattr(net, "load") else 0.0
-
+    # Determine health status
     health = _health_from_voltage(min_voltage)
 
     db.log_grid_state(
@@ -160,18 +169,21 @@ def get_grid_status():
         total_gen=total_generation,
         status=health,
         converged=True,
-        solve_time_ms=solve_time_ms,
+        solve_time_ms=float(snap.get("solve_time_ms") or 0.0),
     )
 
     return {
         "status": health,
         "min_voltage_pu": round(min_voltage, 4),
-        "total_load_mw": total_load,
-        "generation_mw": total_generation,
+        "total_load_mw": round(total_load, 3),
+        "generation_mw": round(total_generation, 3),
+        "solve_time_ms": snap.get("solve_time_ms"),
         "context": ctx,
+        "execution_mode": snap.get("execution_mode", "sandbox"),
+        "estimated_load_loss_pct": snap.get("estimated_load_loss_pct"),
+        "blast_radius_triggered": snap.get("blast_radius_triggered", False),
+        "blast_radius_reason": snap.get("blast_radius_reason"),
     }
-
-
 @app.post("/inject/scenario/{scenario_key}")
 def run_scenario(scenario_key: str):
     """
@@ -185,7 +197,6 @@ def run_scenario(scenario_key: str):
         raise HTTPException(status_code=404, detail="Scenario not found")
 
     try:
-        # If an experiment exists, enter chaos phase. If not, still allow scenario injection.
         controller.set_phase("chaos")
         controller.mutate(spec.fn, mutation_source="scenario")
         return {"message": f"Scenario applied: {spec.display_name}", "scenario": scenario_key}
@@ -219,4 +230,7 @@ def load_spike(multiplier: float):
 def reset_grid():
     _require_writable()
     controller.reset()
-    return {"message": "Grid state has been reset to baseline.", "context": controller.experiment_context()}
+    return {
+        "message": "Grid state has been reset to baseline.",
+        "context": controller.experiment_context(),
+    }
